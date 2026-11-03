@@ -14,6 +14,10 @@ from app.modules.electrical_design.schedule_reports import (
     generate_pdf_report,
 )
 
+from app.modules.electrical_design.cable_sizing.cable_engine import (
+    select_cable,
+)
+
 
 MODULES = {
     "Electrical Design": [
@@ -225,6 +229,10 @@ def render_electrical_design():
     elif selected_tool == "Electrical Load Schedule":
 
         render_equipment_load_schedule()
+
+    elif selected_tool == "Cable Sizing":
+
+        render_cable_sizing()
 
     else:
 
@@ -696,3 +704,271 @@ def render_module(module_name):
         "This module is under development. "
         "Validated engineering calculation engines will be introduced progressively."
     )
+
+
+
+def render_cable_sizing():
+
+    st.subheader("Electrical Cable Sizing")
+
+    st.caption(
+        "IEC-oriented preliminary cable selection and voltage-drop analysis"
+    )
+
+    st.warning(
+        "Cable recommendations require verified ampacity, impedance "
+        "and protective-device reference data. Do not use placeholder "
+        "or estimated ratings for engineering approval."
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        power_kw = st.number_input(
+            "Load Power (kW)",
+            min_value=0.1,
+            value=30.0,
+            step=1.0,
+        )
+
+        voltage = st.number_input(
+            "System Voltage (V)",
+            min_value=1.0,
+            value=400.0,
+        )
+
+        phase = st.selectbox(
+            "Supply Configuration",
+            ["Three Phase", "Single Phase"],
+        )
+
+        power_factor = st.number_input(
+            "Power Factor",
+            min_value=0.01,
+            max_value=1.0,
+            value=0.9,
+        )
+
+        efficiency = st.number_input(
+            "Equipment Efficiency",
+            min_value=0.01,
+            max_value=1.0,
+            value=1.0,
+        )
+
+        length = st.number_input(
+            "Cable Length (m)",
+            min_value=1.0,
+            value=50.0,
+        )
+
+    with col2:
+
+        material = st.selectbox(
+            "Conductor Material",
+            ["Copper", "Aluminium"],
+        )
+
+        insulation = st.selectbox(
+            "Insulation",
+            ["XLPE", "PVC"],
+        )
+
+        reference_method = st.selectbox(
+            "IEC Reference Installation Method",
+            ["A1", "A2", "B1", "B2", "C", "D1", "D2", "E", "F", "G"],
+        )
+
+        construction = st.selectbox(
+            "Cable Construction",
+            ["Multicore", "Single Core"],
+        )
+
+        loaded_conductors = st.selectbox(
+            "Number of Loaded Conductors",
+            [2, 3],
+        )
+
+        operating_temperature = st.number_input(
+            "Conductor Operating Temperature (°C)",
+            min_value=20.0,
+            value=90.0 if insulation == "XLPE" else 70.0,
+        )
+
+    st.divider()
+
+    st.subheader("Installation Correction Factors")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        ambient_factor = st.number_input(
+            "Ambient Factor",
+            min_value=0.01,
+            max_value=1.0,
+            value=1.0,
+        )
+
+    with col2:
+
+        grouping_factor = st.number_input(
+            "Grouping Factor",
+            min_value=0.01,
+            max_value=1.0,
+            value=1.0,
+        )
+
+    with col3:
+
+        other_factor = st.number_input(
+            "Other Correction Factor",
+            min_value=0.01,
+            max_value=1.0,
+            value=1.0,
+        )
+
+    st.divider()
+
+    st.subheader("Protection and Fault Parameters")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        voltage_drop_limit = st.number_input(
+            "Maximum Voltage Drop (%)",
+            min_value=0.1,
+            value=3.0,
+        )
+
+        short_circuit_current = st.number_input(
+            "Prospective Short-Circuit Current (A)",
+            min_value=0.0,
+            value=5000.0,
+        )
+
+    with col2:
+
+        fault_time = st.number_input(
+            "Fault Clearing Time (seconds)",
+            min_value=0.01,
+            value=0.2,
+        )
+
+        # k_factor = st.number_input(
+        #     "Verified Adiabatic k Factor",
+        #     min_value=1.0,
+        #     value=143.0 if material == "Copper" else 94.0,
+        # )
+        k_factor = st.number_input(
+    "Verified Adiabatic k Factor",
+    min_value=1.0,
+    value=1.0,
+    help=(
+        "Enter the verified k value for the conductor material, "
+        "insulation, initial temperature and final temperature. "
+        "The default is a temporary conservative placeholder, "
+        "not an approved design value."
+        ),
+        )
+
+    st.caption(
+        "The k-factor must be verified for the selected conductor, "
+        "insulation and initial/final temperatures. The displayed "
+        "starting value is not an approval of its applicability."
+    )
+
+    if st.button(
+        "Calculate and Select Cable",
+        type="primary",
+    ):
+
+        data = {
+            "power_kw": power_kw,
+            "voltage_v": voltage,
+            "power_factor": power_factor,
+            "efficiency": efficiency,
+            "phase": phase,
+            "material": material,
+            "insulation": insulation,
+            "reference_method": reference_method,
+            "construction": construction,
+            "loaded_conductors": loaded_conductors,
+            "length_m": length,
+            "ambient_factor": ambient_factor,
+            "grouping_factor": grouping_factor,
+            "other_factor": other_factor,
+            "voltage_drop_limit_percent": voltage_drop_limit,
+            "operating_temperature_c": operating_temperature,
+            "short_circuit_current_a": short_circuit_current,
+            "fault_clearing_time_s": fault_time,
+            "k_factor": k_factor,
+        }
+
+        try:
+
+            result = select_cable(data)
+
+            st.session_state["cable_sizing_result"] = result
+
+        except (ValueError, FileNotFoundError) as error:
+
+            st.error(str(error))
+
+    if "cable_sizing_result" in st.session_state:
+
+        result = st.session_state["cable_sizing_result"]
+
+        st.divider()
+
+        st.subheader("Cable Selection Results")
+
+        st.metric(
+            "Design Current",
+            f'{result["design_current_a"]:.2f} A'
+        )
+
+        st.metric(
+            "Protective Device Rating",
+            f'{result["protective_device_a"]:.0f} A'
+        )
+
+        if result["status"] == "PASS":
+
+            selected = result["selected_cable"]
+
+            st.success(
+                f'Selected Cable: {selected["area_mm2"]} mm²'
+            )
+
+            st.write(
+                f'Corrected Ampacity: '
+                f'{selected["corrected_ampacity_a"]:.2f} A'
+            )
+
+            st.write(
+                f'Voltage Drop: '
+                f'{selected["voltage_drop_v"]:.2f} V'
+            )
+
+            st.write(
+                f'Voltage Drop Percentage: '
+                f'{selected["voltage_drop_percent"]:.2f}%'
+            )
+
+            st.write(
+                f'Short-circuit required area: '
+                f'{selected["short_circuit_required_area_mm2"]:.2f} mm²'
+            )
+
+            st.dataframe(
+                pd.DataFrame(result["candidates"]),
+                width="stretch",
+                hide_index=True,
+            )
+
+        else:
+
+            st.error(result["message"])
